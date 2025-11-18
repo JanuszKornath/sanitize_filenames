@@ -1,69 +1,52 @@
 #!/bin/bash
-# sanitize_filenames_safe.sh
-# Trockenlauf standardmäßig. Arbeitet im aktuellen Verzeichnis (.) wie gewünscht.
 
 DRYRUN=1
-LOGFILE="/var/logs/sanitize_filenames.log"
-
-EXCLUDES=(
-  '\.git'
-  'node_modules'
-  'lost\+found'
-)
+LOGFILE="/var/log/sanitize_filenames.log"
+EXCLUDES=( '\.git' 'lost\+found' )
 
 mkdir -p "$(dirname "$LOGFILE")"
 echo "=== Start $(date) ===" >> "$LOGFILE"
 
-# Build find command with excludes
+# find zusammenbauen
 FIND_CMD=(find . -depth)
 for pattern in "${EXCLUDES[@]}"; do
   FIND_CMD+=( -not -path "*$pattern*" )
 done
 FIND_CMD+=( -print0 )
 
+
 "${FIND_CMD[@]}" | while IFS= read -r -d '' old; do
     dir=$(dirname "$old")
     base=$(basename "$old")
 
-    # iconv ersetzt ungültige UTF-8 Bytes durch _
-    newbase=$(printf "%s" "$base" \
-        | iconv -f utf-8 -t utf-8 --byte-subst="_" --unicode-subst="_" 2>/dev/null || true)
+    # **Basename Byte für Byte durchgehen**
+    newbase=""
+    raw=$(printf '%s' "$base" | sed 's/\\/\\\\/g')
 
-    # Falls iconv nichts zurückgibt oder nur Whitespace -> Ersatzname
-    # Entferne führende/trailing whitespace (nur zur Sicherheit)
-    newbase="$(printf '%s' "$newbase" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    # rohe Bytes
+    while IFS= read -r -n1 ch; do
+        byte=$(printf '%d' "'$ch")
 
-    # Sicherheit: kein leerer Name und nicht "." oder ".."
-    if [[ -z "$newbase" || "$newbase" == "." || "$newbase" == ".." ]]; then
-        newbase="_"
-    fi
+        # gültige ASCII-Zeichen? (Leerzeichen bis ~)
+        if (( byte >= 32 && byte <= 126 )); then
+            newbase+="$ch"
+        else
+            newbase+="_"
+        fi
+    done <<< "$base"
 
-    # Wenn unverändert -> nichts tun
-    if [[ "$newbase" == "$base" ]]; then
-        continue
-    fi
+    # Wenn keine Änderung → skip
+    [[ "$newbase" == "$base" ]] && continue
 
     newpath="$dir/$newbase"
 
-    # Falls Ziel schon existiert -> eindeutigen Suffix anhängen
+    # wenn Ziel existiert → suffix anhängen
     if [[ -e "$newpath" ]]; then
-        stem="$newbase"
-        ext=""
-        # optional: behandle Erweiterung separat (name.ext -> name_ext)
-        if [[ "$newbase" == *.* && ! "$newbase" == .* ]]; then
-            stem="${newbase%.*}"
-            ext=".${newbase##*.}"
-        fi
         i=1
-        while [[ -e "$dir/${stem}_$i$ext" ]]; do
+        while [[ -e "$dir/${newbase}_$i" ]]; do
             ((i++))
         done
-        newpath="$dir/${stem}_$i$ext"
-    fi
-
-    # Endgültige Prüfung: vermeide Umbenennung auf gleichen Pfad
-    if [[ "$old" == "$newpath" ]]; then
-        continue
+        newpath="$dir/${newbase}_$i"
     fi
 
     if [[ $DRYRUN -eq 1 ]]; then
@@ -73,9 +56,6 @@ FIND_CMD+=( -print0 )
         echo "Umbenenne: '$old' → '$newpath'"
         echo "$(date)  RENAME  '$old' → '$newpath'" >> "$LOGFILE"
         mv -- "$old" "$newpath"
-        if [[ $? -ne 0 ]]; then
-            echo "$(date)  ERROR renaming '$old' -> '$newpath'" >> "$LOGFILE"
-        fi
     fi
 done
 
