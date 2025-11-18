@@ -9,6 +9,7 @@ LOGFILE="/var/log/sanitize_filenames.log"
 EXCLUDES=(
     "*/.Trash*"
     "*/.Trash*/*"
+    "*/.Trash*/**/*"
     "*/.cache/*"
     "*/lost+found/*"
 )
