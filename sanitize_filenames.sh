@@ -1,7 +1,27 @@
 #!/bin/bash
 
 DRYRUN=1  # 1 = nur anzeigen, 0 = ausführen
+LOGFILE="/var/log/sanitize_filenames.log"
 
+# -------------------------
+# Ordner/Pfade ausschließen
+# -------------------------
+EXCLUDES=(
+    "*/.Trash*"
+    "*/.cache/*"
+    "*/lost+found/*"
+)
+
+# -------------------------
+# Logging
+# -------------------------
+log() {
+    printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$LOGFILE"
+}
+
+# -------------------------
+# Funktion: Name bereinigen
+# -------------------------
 sanitize() {
     local in="$1"
     local out=""
@@ -13,14 +33,9 @@ sanitize() {
         local b
         b=$(printf "%d" "'$ch")
 
-        # ASCII 0x20–0x7E -> OK
         if (( b >= 32 && b <= 126 )); then
             out+="$ch"
-        # UTF-8 Startbyte 0xC2–0xF4 und gültige Folgebytes?
-        elif printf "%s" "$in" | awk 'BEGIN{exit 1}' 2>/dev/null; then
-            : # (wird nie erreicht)
         else
-            # Prüfen ob ab Position i gültiges UTF-8 beginnt:
             if printf '%s' "${in:i}" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
                 out+="$ch"
             else
@@ -34,19 +49,34 @@ sanitize() {
     printf '%s' "$out"
 }
 
-find . -depth -print0 | while IFS= read -r -d '' path; do
+# -------------------------
+# find-Kommando bauen
+# -------------------------
+FIND_CMD=(find .)
+
+for pattern in "${EXCLUDES[@]}"; do
+    FIND_CMD+=(-path "$pattern" -prune -o)
+done
+
+FIND_CMD+=(-depth -print0)
+
+# -------------------------
+# Hauptschleife
+# -------------------------
+"${FIND_CMD[@]}" | while IFS= read -r -d '' path; do
     dir=$(dirname "$path")
     base=$(basename "$path")
 
     clean=$(sanitize "$base")
-
     [[ "$clean" == "$base" ]] && continue
 
     new="$dir/$clean"
 
     if [[ $DRYRUN -eq 1 ]]; then
         echo "WÜRDE umbenennen: '$path' → '$new'"
+        log "DRYRUN: '$path' → '$new'"
     else
         mv -- "$path" "$new"
+        log "RENAMED: '$path' → '$new'"
     fi
 done
