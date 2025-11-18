@@ -1,62 +1,38 @@
 #!/bin/bash
 
-DRYRUN=1
-LOGFILE="/var/log/sanitize_filenames.log"
-EXCLUDES=( '\.git' 'lost\+found' )
+DRYRUN=1  # 0 = umbenennen, 1 = nur anzeigen
 
-mkdir -p "$(dirname "$LOGFILE")"
-echo "=== Start $(date) ===" >> "$LOGFILE"
+sanitize_name() {
+    printf '%s' "$1" \
+        | iconv -f UTF-8 -t UTF-8//TRANSLIT 2>/dev/null \
+        || :
 
-# find zusammenbauen
-FIND_CMD=(find . -depth)
-for pattern in "${EXCLUDES[@]}"; do
-  FIND_CMD+=( -not -path "*$pattern*" )
-done
-FIND_CMD+=( -print0 )
+    # iconv ersetzt ungültige Bytes durch Fragezeichen → wir wandeln "?" in "_" um
+}
 
+find . -depth -print0 | while IFS= read -r -d '' path; do
+    dir=$(dirname "$path")
+    base=$(basename "$path")
 
-"${FIND_CMD[@]}" | while IFS= read -r -d '' old; do
-    dir=$(dirname "$old")
-    base=$(basename "$old")
+    # Nur testen, ob UTF-8 valide
+    if printf '%s' "$base" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
+        # gültiges UTF-8 → nichts tun
+        continue
+    fi
 
-    # **Basename Byte für Byte durchgehen**
-    newbase=""
-    raw=$(printf '%s' "$base" | sed 's/\\/\\\\/g')
+    # Basis bereinigen: ungültige Bytes → ?
+    clean=$(printf '%s' "$base" | iconv -f UTF-8 -t UTF-8//TRANSLIT 2>/dev/null)
 
-    # rohe Bytes
-    while IFS= read -r -n1 ch; do
-        byte=$(printf '%d' "'$ch")
+    # Fragezeichen → Unterstrich
+    clean="${clean//\?/_}"
 
-        # gültige ASCII-Zeichen? (Leerzeichen bis ~)
-        if (( byte >= 32 && byte <= 126 )); then
-            newbase+="$ch"
+    new="$dir/$clean"
+
+    if [[ "$path" != "$new" ]]; then
+        if [[ $DRYRUN -eq 1 ]]; then
+            echo "WÜRDE umbenennen: '$path' → '$new'"
         else
-            newbase+="_"
+            mv -- "$path" "$new"
         fi
-    done <<< "$base"
-
-    # Wenn keine Änderung → skip
-    [[ "$newbase" == "$base" ]] && continue
-
-    newpath="$dir/$newbase"
-
-    # wenn Ziel existiert → suffix anhängen
-    if [[ -e "$newpath" ]]; then
-        i=1
-        while [[ -e "$dir/${newbase}_$i" ]]; do
-            ((i++))
-        done
-        newpath="$dir/${newbase}_$i"
-    fi
-
-    if [[ $DRYRUN -eq 1 ]]; then
-        echo "WÜRDE umbenennen: '$old' → '$newpath'"
-        echo "$(date)  DRYRUN  '$old' → '$newpath'" >> "$LOGFILE"
-    else
-        echo "Umbenenne: '$old' → '$newpath'"
-        echo "$(date)  RENAME  '$old' → '$newpath'" >> "$LOGFILE"
-        mv -- "$old" "$newpath"
     fi
 done
-
-echo "=== Ende $(date) ===" >> "$LOGFILE"
