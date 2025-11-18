@@ -50,15 +50,16 @@ sanitize() {
 }
 
 # -------------------------
-# find-Kommando bauen
+# find-Kommando dynamisch bauen
 # -------------------------
-FIND_CMD=(find .)
+FIND_CMD=(find . -depth)
 
 for pattern in "${EXCLUDES[@]}"; do
     FIND_CMD+=(-path "$pattern" -prune -o)
 done
 
-FIND_CMD+=(-depth -print0)
+# Die tatsächliche Aktion:
+FIND_CMD+=(-print0)
 
 # -------------------------
 # Hauptschleife
