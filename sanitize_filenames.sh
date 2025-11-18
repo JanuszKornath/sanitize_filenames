@@ -14,10 +14,10 @@ EXCLUDES=(
 )
 
 # -------------------------
-# Logging
+# Logging-Funktion
 # -------------------------
 log() {
-    printf "[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$LOGFILE"
+    printf "%s\n" "$1" | tee -a "$LOGFILE"
 }
 
 # -------------------------
@@ -34,38 +34,40 @@ sanitize() {
         local b
         b=$(printf "%d" "'$ch")
 
+        # ASCII 0x20–0x7E = ok
         if (( b >= 32 && b <= 126 )); then
             out+="$ch"
         else
+            # Prüfen ob ab Position i gültiges UTF-8 beginnt
             if printf '%s' "${in:i}" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
                 out+="$ch"
             else
                 out+="_"
             fi
         fi
-
         ((i++))
     done
 
-    printf '%s' "$out"
+    printf "%s" "$out"
 }
 
 # -------------------------
-# find-Kommando dynamisch bauen
+# find-Kommando bauen
 # -------------------------
+
 FIND_CMD=(find . -depth)
 
 for pattern in "${EXCLUDES[@]}"; do
-    FIND_CMD+=(-path "$pattern" -prune -o)
+    FIND_CMD+=( \( -path "$pattern" -prune \) -o )
 done
 
-# Die tatsächliche Aktion:
 FIND_CMD+=(-print0)
 
 # -------------------------
 # Hauptschleife
 # -------------------------
-"${FIND_CMD[@]}" | while IFS= read -r -d '' path; do
+"${FIND_CMD[@]}" |
+while IFS= read -r -d '' path; do
     dir=$(dirname "$path")
     base=$(basename "$path")
 
@@ -75,10 +77,9 @@ FIND_CMD+=(-print0)
     new="$dir/$clean"
 
     if [[ $DRYRUN -eq 1 ]]; then
-        echo "WÜRDE umbenennen: '$path' → '$new'"
-        log "DRYRUN: '$path' → '$new'"
+        log "WÜRDE umbenennen: '$path' → '$new'"
     else
+        log "Umbenennen: '$path' → '$new'"
         mv -- "$path" "$new"
-        log "RENAMED: '$path' → '$new'"
     fi
 done
