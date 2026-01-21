@@ -40,7 +40,7 @@ sanitize() {
             out+="$ch"
         else
             # Prüfen ob ab Position i gültiges UTF-8 beginnt
-            # ACHTUNG: Das ist eine ungenaue Prüfung, aber sie soll hier das Originalskriptverhalten nachbilden
+            # ungenaue Prüfung
             if printf '%s' "${in:i}" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
                 out+="$ch"
             else
