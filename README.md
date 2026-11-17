@@ -29,15 +29,15 @@ Dry-Run ausführen (Standard)
 ./sanitize_filenames.sh
 ```
 
-Echtmodus (Umbenennungen werden durchgeführt)
-```
-DRYRUN=0 ./sanitize_filenames.sh
-```
-
-Oder Variable im Skript anpassen:
+Echtmodus (Umbenennungen werden durchgeführt): Variable oben im Skript anpassen
 ```
 DRYRUN=0
 ```
+Hinweis: `DRYRUN` wird im Skript fest gesetzt; ein Aufruf wie
+`DRYRUN=0 ./sanitize_filenames.sh` bleibt daher im Dry-Run.
+
+Das Skript arbeitet rekursiv ab dem aktuellen Verzeichnis (`find . -depth`),
+also vorher in das zu bereinigende Verzeichnis wechseln.
 ## Ausschlüsse
 
 Folgende Pfade werden von der Verarbeitung ausgeschlossen:
